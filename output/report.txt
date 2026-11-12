@@ -1,0 +1,14 @@
+[check] 8 streams mixed, 4766 output samples, max sample diff vs per-stream: 0
+[check] PASS: multi-stream mix is sample-by-sample identical to per-stream processing
+[check] mixed output (4766 samples, float32) written to output/mixed.f32
+[limit] max_streams=2, add_stream returned 0, 1, -6 -> PASS: third stream rejected (Too many streams.)
+[mem]  streams | mixer heap (B) | naive per-stream heap (B)
+[mem]        1 |           5984 |                      5920
+[mem]        2 |           6240 |                     10256
+[mem]        3 |           8560 |                     16704
+[mem]        4 |           8864 |                     21056
+[mem]        5 |           9136 |                     27504
+[mem]        6 |           9376 |                     33968
+[mem]        7 |           9616 |                     39120
+[mem]        8 |          10784 |                     45152
+[mem] peak process memory (ru_maxrss): 3504 KB

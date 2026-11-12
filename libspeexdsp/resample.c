@@ -139,11 +139,30 @@ struct SpeexResamplerState_ {
    spx_word16_t *mem;
    spx_word16_t *sinc_table;
    spx_uint32_t sinc_table_length;
+   spx_uint32_t *sinc_table_refcount;
    resampler_basic_func resampler_ptr;
 
    int    in_stride;
    int    out_stride;
 } ;
+
+/* Release the sinc table, taking sharing (reference counting) into account */
+static void sinc_table_release(SpeexResamplerState *st)
+{
+   if (st->sinc_table_refcount)
+   {
+      if (--(*st->sinc_table_refcount) == 0)
+      {
+         speex_free(st->sinc_table);
+         speex_free(st->sinc_table_refcount);
+      }
+   } else {
+      speex_free(st->sinc_table);
+   }
+   st->sinc_table = NULL;
+   st->sinc_table_refcount = NULL;
+   st->sinc_table_length = 0;
+}
 
 static const double kaiser12_table[68] = {
    0.99859849, 1.00000000, 0.99859849, 0.99440475, 0.98745105, 0.97779076,
@@ -610,6 +629,27 @@ static int update_filter(SpeexResamplerState *st)
    spx_uint32_t min_sinc_table_length;
    spx_uint32_t min_alloc_size;
 
+   /* If the sinc table is shared with other resamplers, detach from it
+      before it gets reallocated or overwritten */
+   if (st->sinc_table_refcount)
+   {
+      if (*st->sinc_table_refcount > 1)
+      {
+         spx_word16_t *table_copy = (spx_word16_t *)speex_alloc(st->sinc_table_length*sizeof(spx_word16_t));
+         if (!table_copy)
+         {
+            st->resampler_ptr = resampler_basic_zero;
+            return RESAMPLER_ERR_ALLOC_FAILED;
+         }
+         memcpy(table_copy, st->sinc_table, st->sinc_table_length*sizeof(spx_word16_t));
+         --(*st->sinc_table_refcount);
+         st->sinc_table = table_copy;
+      } else {
+         speex_free(st->sinc_table_refcount);
+      }
+      st->sinc_table_refcount = NULL;
+   }
+
    st->int_advance = st->num_rate/st->den_rate;
    st->frac_advance = st->num_rate%st->den_rate;
    st->oversample = quality_map[st->quality].oversample;
@@ -825,6 +865,7 @@ EXPORT SpeexResamplerState *speex_resampler_init_frac(spx_uint32_t nb_channels, 
    st->den_rate = 0;
    st->quality = -1;
    st->sinc_table_length = 0;
+   st->sinc_table_refcount = 0;
    st->mem_alloc_size = 0;
    st->filt_len = 0;
    st->mem = 0;
@@ -871,7 +912,7 @@ fail:
 EXPORT void speex_resampler_destroy(SpeexResamplerState *st)
 {
    speex_free(st->mem);
-   speex_free(st->sinc_table);
+   sinc_table_release(st);
    speex_free(st->last_sample);
    speex_free(st->magic_samples);
    speex_free(st->samp_frac_num);
@@ -1222,6 +1263,149 @@ EXPORT int speex_resampler_reset_mem(SpeexResamplerState *st)
    return RESAMPLER_ERR_SUCCESS;
 }
 
+EXPORT int speex_resampler_share_sinc_table(SpeexResamplerState *st, SpeexResamplerState *donor)
+{
+   if (!st->initialised || !donor->initialised)
+      return RESAMPLER_ERR_BAD_STATE;
+   /* Only share when both resamplers would build identical tables */
+   if (st->resampler_ptr != donor->resampler_ptr ||
+       st->filt_len != donor->filt_len ||
+       st->oversample != donor->oversample ||
+       st->cutoff != donor->cutoff ||
+       st->sinc_table_length != donor->sinc_table_length)
+      return RESAMPLER_ERR_INVALID_ARG;
+   if (st->sinc_table == donor->sinc_table)
+      return RESAMPLER_ERR_SUCCESS;
+   sinc_table_release(st);
+   if (!donor->sinc_table_refcount)
+   {
+      donor->sinc_table_refcount = (spx_uint32_t *)speex_alloc(sizeof(spx_uint32_t));
+      if (!donor->sinc_table_refcount)
+         return RESAMPLER_ERR_ALLOC_FAILED;
+      *donor->sinc_table_refcount = 1;
+   }
+   st->sinc_table = donor->sinc_table;
+   st->sinc_table_length = donor->sinc_table_length;
+   st->sinc_table_refcount = donor->sinc_table_refcount;
+   ++(*st->sinc_table_refcount);
+   return RESAMPLER_ERR_SUCCESS;
+}
+
+struct SpeexResamplerMixer_ {
+   spx_uint32_t out_rate;
+   int quality;
+   spx_uint32_t max_streams;
+   spx_uint32_t nb_streams;
+   SpeexResamplerState **streams;
+   /* Single scratch buffer reused for every stream so that the mixing
+      memory stays constant no matter how many streams are mixed */
+   float *scratch;
+   spx_uint32_t scratch_len;
+};
+
+EXPORT SpeexResamplerMixer *speex_resampler_mixer_init(spx_uint32_t out_rate, int quality, spx_uint32_t max_streams, int *err)
+{
+   SpeexResamplerMixer *mixer;
+   if (out_rate == 0 || quality < 0 || quality > 10 || max_streams == 0)
+   {
+      if (err)
+         *err = RESAMPLER_ERR_INVALID_ARG;
+      return NULL;
+   }
+   mixer = (SpeexResamplerMixer *)speex_alloc(sizeof(SpeexResamplerMixer));
+   if (!mixer)
+   {
+      if (err)
+         *err = RESAMPLER_ERR_ALLOC_FAILED;
+      return NULL;
+   }
+   mixer->streams = (SpeexResamplerState **)speex_alloc(max_streams*sizeof(SpeexResamplerState *));
+   if (!mixer->streams)
+   {
+      speex_free(mixer);
+      if (err)
+         *err = RESAMPLER_ERR_ALLOC_FAILED;
+      return NULL;
+   }
+   mixer->out_rate = out_rate;
+   mixer->quality = quality;
+   mixer->max_streams = max_streams;
+   mixer->nb_streams = 0;
+   mixer->scratch = NULL;
+   mixer->scratch_len = 0;
+   if (err)
+      *err = RESAMPLER_ERR_SUCCESS;
+   return mixer;
+}
+
+EXPORT int speex_resampler_mixer_add_stream(SpeexResamplerMixer *mixer, spx_uint32_t in_rate)
+{
+   SpeexResamplerState *st;
+   spx_uint32_t i;
+   int err;
+   if (mixer->nb_streams >= mixer->max_streams)
+      return -RESAMPLER_ERR_TOO_MANY_STREAMS;
+   st = speex_resampler_init(1, in_rate, mixer->out_rate, mixer->quality, &err);
+   if (!st)
+      return -err;
+   speex_resampler_skip_zeros(st);
+   /* Share the sinc table (the bulk of the per-stream memory) with any
+      previous stream that would build an identical table */
+   for (i=0;i<mixer->nb_streams;i++)
+   {
+      if (speex_resampler_share_sinc_table(st, mixer->streams[i]) == RESAMPLER_ERR_SUCCESS)
+         break;
+   }
+   mixer->streams[mixer->nb_streams] = st;
+   return (int)mixer->nb_streams++;
+}
+
+EXPORT int speex_resampler_mixer_process_float(SpeexResamplerMixer *mixer, const float *const *in, spx_uint32_t *in_len, float *out, spx_uint32_t *out_len)
+{
+   spx_uint32_t i;
+   spx_uint32_t j;
+   const spx_uint32_t out_capacity = *out_len;
+   spx_uint32_t max_produced = 0;
+   if (out_capacity > mixer->scratch_len)
+   {
+      float *scratch = (float *)speex_realloc(mixer->scratch, out_capacity*sizeof(float));
+      if (!scratch)
+         return RESAMPLER_ERR_ALLOC_FAILED;
+      mixer->scratch = scratch;
+      mixer->scratch_len = out_capacity;
+   }
+   for (j=0;j<out_capacity;j++)
+      out[j] = 0;
+   for (i=0;i<mixer->nb_streams;i++)
+   {
+      spx_uint32_t consumed = in_len[i];
+      spx_uint32_t produced = out_capacity;
+      int err = speex_resampler_process_float(mixer->streams[i], 0, in ? in[i] : NULL, &consumed, mixer->scratch, &produced);
+      in_len[i] = consumed;
+      for (j=0;j<produced;j++)
+         out[j] += mixer->scratch[j];
+      if (produced > max_produced)
+         max_produced = produced;
+      if (err != RESAMPLER_ERR_SUCCESS)
+      {
+         *out_len = max_produced;
+         return err;
+      }
+   }
+   *out_len = max_produced;
+   return RESAMPLER_ERR_SUCCESS;
+}
+
+EXPORT void speex_resampler_mixer_destroy(SpeexResamplerMixer *mixer)
+{
+   spx_uint32_t i;
+   for (i=0;i<mixer->nb_streams;i++)
+      speex_resampler_destroy(mixer->streams[i]);
+   speex_free(mixer->streams);
+   speex_free(mixer->scratch);
+   speex_free(mixer);
+}
+
 EXPORT const char *speex_resampler_strerror(int err)
 {
    switch (err)
@@ -1236,6 +1420,8 @@ EXPORT const char *speex_resampler_strerror(int err)
          return "Invalid argument.";
       case RESAMPLER_ERR_PTR_OVERLAP:
          return "Input and output buffers overlap.";
+      case RESAMPLER_ERR_TOO_MANY_STREAMS:
+         return "Too many streams.";
       default:
          return "Unknown error. Bad error code or strange version mismatch.";
    }

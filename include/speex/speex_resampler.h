@@ -76,6 +76,11 @@
 #define speex_resampler_skip_zeros CAT_PREFIX(RANDOM_PREFIX,_resampler_skip_zeros)
 #define speex_resampler_reset_mem CAT_PREFIX(RANDOM_PREFIX,_resampler_reset_mem)
 #define speex_resampler_strerror CAT_PREFIX(RANDOM_PREFIX,_resampler_strerror)
+#define speex_resampler_share_sinc_table CAT_PREFIX(RANDOM_PREFIX,_resampler_share_sinc_table)
+#define speex_resampler_mixer_init CAT_PREFIX(RANDOM_PREFIX,_resampler_mixer_init)
+#define speex_resampler_mixer_add_stream CAT_PREFIX(RANDOM_PREFIX,_resampler_mixer_add_stream)
+#define speex_resampler_mixer_process_float CAT_PREFIX(RANDOM_PREFIX,_resampler_mixer_process_float)
+#define speex_resampler_mixer_destroy CAT_PREFIX(RANDOM_PREFIX,_resampler_mixer_destroy)
 
 #define spx_int16_t short
 #define spx_int32_t int
@@ -107,12 +112,16 @@ enum {
    RESAMPLER_ERR_INVALID_ARG     = 3,
    RESAMPLER_ERR_PTR_OVERLAP     = 4,
    RESAMPLER_ERR_OVERFLOW        = 5,
+   RESAMPLER_ERR_TOO_MANY_STREAMS = 6,
 
    RESAMPLER_ERR_MAX_ERROR
 };
 
 struct SpeexResamplerState_;
 typedef struct SpeexResamplerState_ SpeexResamplerState;
+
+struct SpeexResamplerMixer_;
+typedef struct SpeexResamplerMixer_ SpeexResamplerMixer;
 
 /** Create a new resampler with integer input and output rates.
  * @param nb_channels Number of channels to be processed
@@ -329,6 +338,70 @@ int speex_resampler_skip_zeros(SpeexResamplerState *st);
  * @param st Resampler state
  */
 int speex_resampler_reset_mem(SpeexResamplerState *st);
+
+/** Make a resampler share its sinc table with another resampler. The table
+ * is only shared when both resamplers would build byte-identical tables
+ * (same quality, filter length, oversampling and cutoff), so resampling
+ * results are unaffected. Sharing is reference counted and transparently
+ * undone if either resampler later needs to rebuild its table.
+ * @param st Resampler state that will point to the shared table
+ * @param donor Resampler state providing the table
+ * @return Error code (RESAMPLER_ERR_INVALID_ARG if tables are not compatible)
+ */
+int speex_resampler_share_sinc_table(SpeexResamplerState *st,
+                                      SpeexResamplerState *donor);
+
+/** Create a mixer that resamples several input streams (each with its own
+ * sampling rate) to a common rate and sums them into a single stream.
+ * Each stream keeps its own independent resampler phase; streams never
+ * share filter state, so there is no crosstalk. The sinc tables (the bulk
+ * of the memory) are shared between streams whenever they are identical,
+ * and a single scratch buffer is reused for all streams, so memory usage
+ * does not grow linearly with the number of streams.
+ * @param out_rate Common output sampling rate (integer number of Hz)
+ * @param quality Resampling quality between 0 and 10
+ * @param max_streams Maximum number of streams the mixer can accept
+ * @param err Error code (may be NULL)
+ * @return Newly created mixer state
+ * @retval NULL Error: invalid argument or not enough memory
+ */
+SpeexResamplerMixer *speex_resampler_mixer_init(spx_uint32_t out_rate,
+                                                 int quality,
+                                                 spx_uint32_t max_streams,
+                                                 int *err);
+
+/** Add an input stream to a mixer.
+ * @param mixer Mixer state
+ * @param in_rate Input sampling rate of the new stream (integer number of Hz)
+ * @return Index (>= 0) of the new stream, or a negative error code
+ * (-RESAMPLER_ERR_TOO_MANY_STREAMS when the stream limit is reached)
+ */
+int speex_resampler_mixer_add_stream(SpeexResamplerMixer *mixer,
+                                      spx_uint32_t in_rate);
+
+/** Resample all streams and mix them into a single float array. The mixed
+ * result is bit-exact identical to resampling each stream separately and
+ * summing the outputs in stream order.
+ * @param mixer Mixer state
+ * @param in Array of per-stream input buffers (NULL entries are treated as
+ * silence)
+ * @param in_len Array with the number of input samples available per stream.
+ * Returns the number of samples consumed per stream
+ * @param out Mixed output buffer
+ * @param out_len Size of the output buffer. Returns the number of samples
+ * written (the maximum over all streams)
+ * @return Error code
+ */
+int speex_resampler_mixer_process_float(SpeexResamplerMixer *mixer,
+                                         const float *const *in,
+                                         spx_uint32_t *in_len,
+                                         float *out,
+                                         spx_uint32_t *out_len);
+
+/** Destroy a mixer and all the stream states it owns.
+ * @param mixer Mixer state
+ */
+void speex_resampler_mixer_destroy(SpeexResamplerMixer *mixer);
 
 /** Returns the English meaning for an error code
  * @param err Error code
