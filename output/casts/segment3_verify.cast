@@ -1,0 +1,11 @@
+{"version":2,"width":80,"height":24,"timestamp":1794547961,"command":"bash '/home/ys/feedback/uidreczz28YpbZJShIo/output/casts/run_segment_3.sh'","env":{"SHELL":"/bin/bash"}}
+[0.00838, "o", "\r\n\u001b[1;36m============================================================\r\n Verification [3/4]\r\n============================================================\u001b[0m\r\n"]
+[0.011031, "o", "\r\u001b[1;33m--- next segment in 2s ---\u001b[0m"]
+[1.015154, "o", "\r\u001b[1;33m--- next segment in 1s ---\u001b[0m"]
+[2.017183, "o", "\r                                        \r"]
+[2.021967, "o", "\r\n\u001b[1;36m============================================================\r\n Segment 3: offline equivalence, continuity, latency, error codes\r\n============================================================\u001b[0m\r\n"]
+[2.430241, "o", "live samples      : 74406\r\nreference samples : 74406\r\nexact match       : PASS\r\nfixed-rate 32k offline equivalence: offset=11 samples, max|diff|=0 over 18689 samples PASS\r\nsteady |dx| median: 0.02510965  p99.9: 0.09191526\r\nswitch 1 boundary : pos=28760 |dx|=0.00170565 ratio_to_median=0.068 PASS\r\nswitch 2 boundary : pos=55217 |dx|=0.00407219 ratio_to_median=0.162 PASS\r\nswitch time (call): 0.0246 ms, 0.0066 ms\r\nswitch time 4000-run max    : 0.1012 ms\r\nswitch time 4000-run p99.9  : 0.0661 ms\r\nswitch time 4000-run median : 0.0191 ms\r\nillegal (48000,0) -> code 3, state kept: PASS\r\nillegal (0,32000) -> code 3, state kept: PASS\r\nNULL state -> code 2: PASS\r\nOVERALL: PASS\r\n"]
+[2.449529, "o", "\r\u001b[1;33m--- next segment in 2s ---\u001b[0m"]
+[3.451946, "o", "\r\u001b[1;33m--- next segment in 1s ---\u001b[0m"]
+[4.455601, "o", "\r                                        \r"]
+[4.456095, "x", "0"]

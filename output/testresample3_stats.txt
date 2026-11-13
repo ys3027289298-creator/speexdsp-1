@@ -1,0 +1,12 @@
+frames=180 frame_samples=480 quality=5
+rates=48000,44100,32000
+output_samples=74406
+switch_boundary_output_pos=28760,55217
+switch_1_time_ms=0.022433
+switch_2_time_ms=0.003827
+switch_max_time_ms=0.022433
+steady_firstdiff_median=0.02510965
+steady_firstdiff_p99.9=0.09191526
+switch_1_boundary_firstdiff=0.00170565 ratio_to_ref=0.019
+switch_2_boundary_firstdiff=0.00407219 ratio_to_ref=0.044
+continuity_check=PASS

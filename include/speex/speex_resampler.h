@@ -220,13 +220,19 @@ int speex_resampler_process_interleaved_int(SpeexResamplerState *st,
                                              spx_uint32_t *out_len);
 
 /** Set (change) the input/output sampling rates (integer value).
+ * This can be called at any time, including in the middle of a stream.
+ * The resampler state (filter memory and fractional phase) is migrated
+ * rather than reinitialized, so processing continues without restarting
+ * the stream. On failure the previous rate and full state are preserved.
  * @param st Resampler state
  * @param in_rate Input sampling rate (integer number of Hz).
  * @param out_rate Output sampling rate (integer number of Hz).
+ * @return RESAMPLER_ERR_SUCCESS or an error code such as
+ * RESAMPLER_ERR_BAD_STATE / RESAMPLER_ERR_INVALID_ARG
  */
 int speex_resampler_set_rate(SpeexResamplerState *st,
-                              spx_uint32_t in_rate,
-                              spx_uint32_t out_rate);
+                             spx_uint32_t in_rate,
+                             spx_uint32_t out_rate);
 
 /** Get the current input/output sampling rates (integer value).
  * @param st Resampler state

@@ -1,0 +1,15 @@
+live samples      : 74406
+reference samples : 74406
+exact match       : PASS
+fixed-rate 32k offline equivalence: offset=11 samples, max|diff|=0 over 18689 samples PASS
+steady |dx| median: 0.02510965  p99.9: 0.09191526
+switch 1 boundary : pos=28760 |dx|=0.00170565 ratio_to_median=0.068 PASS
+switch 2 boundary : pos=55217 |dx|=0.00407219 ratio_to_median=0.162 PASS
+switch time (call): 0.0246 ms, 0.0066 ms
+switch time 4000-run max    : 0.1012 ms
+switch time 4000-run p99.9  : 0.0661 ms
+switch time 4000-run median : 0.0191 ms
+illegal (48000,0) -> code 3, state kept: PASS
+illegal (0,32000) -> code 3, state kept: PASS
+NULL state -> code 2: PASS
+OVERALL: PASS

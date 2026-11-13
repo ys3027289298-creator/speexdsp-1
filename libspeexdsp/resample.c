@@ -1086,11 +1086,15 @@ EXPORT int speex_resampler_process_interleaved_int(SpeexResamplerState *st, cons
 
 EXPORT int speex_resampler_set_rate(SpeexResamplerState *st, spx_uint32_t in_rate, spx_uint32_t out_rate)
 {
+   if (!st)
+      return RESAMPLER_ERR_BAD_STATE;
    return speex_resampler_set_rate_frac(st, in_rate, out_rate, in_rate, out_rate);
 }
 
 EXPORT void speex_resampler_get_rate(SpeexResamplerState *st, spx_uint32_t *in_rate, spx_uint32_t *out_rate)
 {
+   if (!st)
+      return;
    *in_rate = st->in_rate;
    *out_rate = st->out_rate;
 }
@@ -1111,8 +1115,13 @@ EXPORT int speex_resampler_set_rate_frac(SpeexResamplerState *st, spx_uint32_t r
 {
    spx_uint32_t fact;
    spx_uint32_t old_den;
+   spx_uint32_t old_num;
+   spx_uint32_t old_in_rate;
+   spx_uint32_t old_out_rate;
    spx_uint32_t i;
 
+   if (!st)
+      return RESAMPLER_ERR_BAD_STATE;
    if (ratio_num == 0 || ratio_den == 0)
       return RESAMPLER_ERR_INVALID_ARG;
 
@@ -1120,6 +1129,9 @@ EXPORT int speex_resampler_set_rate_frac(SpeexResamplerState *st, spx_uint32_t r
       return RESAMPLER_ERR_SUCCESS;
 
    old_den = st->den_rate;
+   old_num = st->num_rate;
+   old_in_rate = st->in_rate;
+   old_out_rate = st->out_rate;
    st->in_rate = in_rate;
    st->out_rate = out_rate;
    st->num_rate = ratio_num;
@@ -1134,16 +1146,38 @@ EXPORT int speex_resampler_set_rate_frac(SpeexResamplerState *st, spx_uint32_t r
    {
       for (i=0;i<st->nb_channels;i++)
       {
-         if (multiply_frac(&st->samp_frac_num[i],st->samp_frac_num[i],st->den_rate,old_den) != RESAMPLER_ERR_SUCCESS)
+         spx_uint32_t new_frac = st->samp_frac_num[i];
+         if (multiply_frac(&new_frac, new_frac, st->den_rate, old_den) != RESAMPLER_ERR_SUCCESS)
+         {
+            /* Roll back so a failed switch leaves the running stream untouched. */
+            st->in_rate = old_in_rate;
+            st->out_rate = old_out_rate;
+            st->num_rate = old_num;
+            st->den_rate = old_den;
             return RESAMPLER_ERR_OVERFLOW;
+         }
          /* Safety net */
-         if (st->samp_frac_num[i] >= st->den_rate)
-            st->samp_frac_num[i] = st->den_rate-1;
+         if (new_frac >= st->den_rate)
+            new_frac = st->den_rate-1;
+         st->samp_frac_num[i] = new_frac;
       }
    }
 
    if (st->initialised)
-      return update_filter(st);
+   {
+      int err = update_filter(st);
+      if (err != RESAMPLER_ERR_SUCCESS)
+      {
+         /* update_filter failed: restore the previous ratio; the filter memory
+            and phase state were not modified, so the stream keeps running. */
+         st->in_rate = old_in_rate;
+         st->out_rate = old_out_rate;
+         st->num_rate = old_num;
+         st->den_rate = old_den;
+         update_filter(st);
+      }
+      return err;
+   }
    return RESAMPLER_ERR_SUCCESS;
 }
 
@@ -1155,6 +1189,8 @@ EXPORT void speex_resampler_get_ratio(SpeexResamplerState *st, spx_uint32_t *rat
 
 EXPORT int speex_resampler_set_quality(SpeexResamplerState *st, int quality)
 {
+   if (!st)
+      return RESAMPLER_ERR_BAD_STATE;
    if (quality > 10 || quality < 0)
       return RESAMPLER_ERR_INVALID_ARG;
    if (st->quality == quality)
@@ -1236,6 +1272,8 @@ EXPORT const char *speex_resampler_strerror(int err)
          return "Invalid argument.";
       case RESAMPLER_ERR_PTR_OVERLAP:
          return "Input and output buffers overlap.";
+      case RESAMPLER_ERR_OVERFLOW:
+         return "Overflow in resampling ratio.";
       default:
          return "Unknown error. Bad error code or strange version mismatch.";
    }

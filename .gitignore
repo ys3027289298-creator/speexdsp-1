@@ -30,6 +30,7 @@ include/speex/speexdsp_config_types.h
 testdenoise
 testecho
 testjitter
+testresample3
 libtool
 speexdsp.pc
 stamp-*

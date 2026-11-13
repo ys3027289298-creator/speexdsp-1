@@ -1,0 +1,12 @@
+{"version":2,"width":80,"height":24,"timestamp":1794547952,"command":"bash '/home/ys/feedback/uidreczz28YpbZJShIo/output/casts/run_segment_1.sh'","env":{"SHELL":"/bin/bash"}}
+[0.008164, "o", "\r\n\u001b[1;36m============================================================\r\n Build [1/4]\r\n============================================================\u001b[0m\r\n"]
+[0.01084, "o", "\r\u001b[1;33m--- next segment in 2s ---\u001b[0m"]
+[1.015814, "o", "\r\u001b[1;33m--- next segment in 1s ---\u001b[0m"]
+[2.023094, "o", "\r                                        \r"]
+[2.027478, "o", "\r\n\u001b[1;36m============================================================\r\n Segment 1: build libspeexdsp with the new test entry\r\n============================================================\u001b[0m\r\n"]
+[2.158837, "o", "make[2]: Leaving directory '/home/ys/feedback/uidreczz28YpbZJShIo/ti'\r\nmake[2]: Entering directory '/home/ys/feedback/uidreczz28YpbZJShIo'\r\nmake[2]: Leaving directory '/home/ys/feedback/uidreczz28YpbZJShIo'\r\nmake[1]: Leaving directory '/home/ys/feedback/uidreczz28YpbZJShIo'\r\n"]
+[2.162092, "o", "-rwxr-xr-x 1 ys ys 6379 Nov 13 13:32 libspeexdsp/testresample3\r\n"]
+[2.165517, "o", "\r\u001b[1;33m--- next segment in 2s ---\u001b[0m"]
+[3.166829, "o", "\r\u001b[1;33m--- next segment in 1s ---\u001b[0m"]
+[4.169182, "o", "\r                                        \r"]
+[4.169621, "x", "0"]
